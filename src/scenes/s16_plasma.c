@@ -12,9 +12,10 @@
 #define DROP_T 64 /* drop length in 70 Hz ticks */
 
 typedef struct {
-    int16_t wave_a[TAB]; /* distorts the first field's x */
-    int16_t wave_b[TAB]; /* distorts the second field's x */
-    int16_t field[TAB];
+    /* all 0..128; bytes keep the state small (the waves are scaled at use) */
+    uint8_t wave_a[TAB]; /* distorts the first field's x, x16 */
+    uint8_t wave_b[TAB]; /* distorts the second field's x, x8 */
+    uint8_t field[TAB];
     uint8_t lum[3][256]; /* palette brightness per sequence */
 } Plasma;
 
@@ -79,9 +80,9 @@ static void* plasma_init(const Scene* self) {
     Plasma* p = plat_alloc(sizeof(Plasma));
     if(!p) return NULL;
     for(int32_t a = 0; a < TAB; a++) {
-        p->wave_a[a] = (int16_t)(((55 * s4096(a, 1) + 5 * s4096(a, 4) + 3 * s4096(a, 17)) / FX_ONE14 + 64) * 16);
-        p->wave_b[a] = (int16_t)(((55 * s4096(a, 1) + 8 * s4096(a, 5) + 2 * s4096(a, 15)) / FX_ONE14 + 64) * 8);
-        p->field[a] = (int16_t)((55 * s4096(a, 1) + 5 * s4096(a, 6) + 4 * s4096(a, 21)) / FX_ONE14 + 64);
+        p->wave_a[a] = (uint8_t)((55 * s4096(a, 1) + 5 * s4096(a, 4) + 3 * s4096(a, 17)) / FX_ONE14 + 64);
+        p->wave_b[a] = (uint8_t)((55 * s4096(a, 1) + 8 * s4096(a, 5) + 2 * s4096(a, 15)) / FX_ONE14 + 64);
+        p->field[a] = (uint8_t)((55 * s4096(a, 1) + 5 * s4096(a, 6) + 4 * s4096(a, 21)) / FX_ONE14 + 64);
     }
     for(int s = 0; s < 3; s++) {
         int peak = 1;
@@ -134,8 +135,8 @@ static void plasma_render(void* state, Frame* f, uint32_t t_ms) {
             int32_t ox = x * 5 / 8; /* 80 original columns */
             int32_t rx = 80 - ox;
             const int32_t* o = ((x ^ y) & 1) ? ofs + 4 : ofs;
-            int32_t v1 = p->field[(ox * 8 + o[0] + p->wave_a[(oy + o[1] + rx * 4) & TABM]) & TABM];
-            int32_t v2 = p->field[(p->wave_b[(oy + o[3] + ox * 16) & TABM] + oy * 2 + o[2] + rx * 4) & TABM];
+            int32_t v1 = p->field[(ox * 8 + o[0] + p->wave_a[(oy + o[1] + rx * 4) & TABM] * 16) & TABM];
+            int32_t v2 = p->field[(p->wave_b[(oy + o[3] + ox * 16) & TABM] * 8 + oy * 2 + o[2] + rx * 4) & TABM];
             f->px[y][x] = lut[(v1 + v2) & 255];
         }
     }

@@ -30,7 +30,7 @@ App(
     entry_point="second_app",
     stack_size=4 * 1024,
     fap_category="Media",
-    fap_version="0.1",
+    fap_version="0.2",
     fap_icon="images/second.png",  # 10x10 1-bit PNG
     fap_description="Future Crew's Second Reality demo, recreated for the Flipper Zero",
     fap_author="Roberto De Feo",

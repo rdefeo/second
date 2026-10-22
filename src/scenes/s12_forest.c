@@ -18,48 +18,56 @@
 #define LEAF_GAIN 24 /* leaf brightness, 16 = as the original */
 #endif
 
-enum {
-    BgFull,
-    BgLeaves,
-    TextFull,
-    TextLeaves,
-};
-
 typedef struct {
-    Image pics; /* 4 frames, see enum */
-    uint8_t* blob;
-    uint16_t win_w, win_h, text_w, text_h;
-    const uint8_t* map; /* 85x64 u16 window pixel or 0xffff */
-    const uint8_t* text; /* text_h x text_w levels 0..7, 2 per byte */
+    Image bg; /* 2 frames: full palette, leaves only */
+    uint8_t* hits; /* n x (x, y, window row, column, text full, leaves) */
+    uint8_t* text; /* text_h x text_w levels 0..7, 2 per byte */
+    uint16_t n, text_w, text_h;
 } Forest;
+
+static void forest_deinit(void* state) {
+    Forest* s = state;
+    image_free(&s->bg);
+    plat_free(s->hits);
+    plat_free(s->text);
+    plat_free(s);
+}
+
+/* The hit list and the text go in separate blocks: two ~10 KB holes are
+ * easier to find in the heap than one 20 KB one. */
+static bool forest_load(Forest* s) {
+    if(!image_load(&s->bg, "forest.srg") || s->bg.frames < 2) return false;
+    PlatFile* file = plat_asset_open("forest.bin");
+    if(!file) return false;
+    uint8_t hdr[12];
+    bool ok = plat_asset_read(file, 0, hdr, sizeof(hdr)) && !memcmp(hdr, "SRF3", 4);
+    if(ok) {
+        s->n = hdr[4] | hdr[5] << 8;
+        s->text_w = hdr[6] | hdr[7] << 8;
+        s->text_h = hdr[8] | hdr[9] << 8;
+        size_t hits = (size_t)s->n * 6, text = (size_t)s->text_w * s->text_h / 2;
+        ok = (s->hits = plat_alloc(hits)) && plat_asset_read(file, sizeof(hdr), s->hits, hits) &&
+             (s->text = plat_alloc(text)) && plat_asset_read(file, sizeof(hdr) + hits, s->text, text);
+    }
+    plat_asset_close(file);
+    return ok;
+}
 
 static void* forest_init(const Scene* self) {
     (void)self;
     Forest* s = plat_alloc(sizeof(Forest));
     if(!s) return NULL;
-    size_t size = 0;
-    s->blob = plat_load_asset("forest.bin", &size);
-    if(!s->blob || size < 12 || memcmp(s->blob, "SRF2", 4) || !image_load(&s->pics, "forest.srg") ||
-       s->pics.frames < 4) {
-        image_free(&s->pics);
-        plat_free(s->blob);
-        plat_free(s);
+    if(!forest_load(s)) {
+        forest_deinit(s);
         return NULL;
     }
-    const uint8_t* d = s->blob;
-    s->win_w = d[4] | d[5] << 8;
-    s->win_h = d[6] | d[7] << 8;
-    s->text_w = d[8] | d[9] << 8;
-    s->text_h = d[10] | d[11] << 8;
-    s->map = d + 12;
-    s->text = s->map + s->pics.w * s->pics.h * 2;
 
     /* The leaves are very dark (12% on average) and get lost on the LCD:
      * brighten them, in the leaves-only picture and by the same amount in
      * the full one (where they're the same pixels, mixed at the edges). */
-    uint8_t* full = (uint8_t*)image_frame(&s->pics, BgFull);
-    uint8_t* leaves = (uint8_t*)image_frame(&s->pics, BgLeaves);
-    for(int i = 0; i < s->pics.w * s->pics.h; i++) {
+    uint8_t* full = (uint8_t*)image_frame(&s->bg, 0);
+    uint8_t* leaves = (uint8_t*)image_frame(&s->bg, 1);
+    for(int i = 0; i < s->bg.w * s->bg.h; i++) {
         int add = leaves[i] * (LEAF_GAIN - 16) / 16;
         leaves[i] = (uint8_t)clampi(leaves[i] + add, 0, 255);
         full[i] = (uint8_t)clampi(full[i] + add, 0, 255);
@@ -82,44 +90,36 @@ static void forest_render(void* state, Frame* f, uint32_t t_ms) {
     }
     int32_t step = t_ms < SCROLL_MS ? 0 : (int32_t)frame70(t_ms - SCROLL_MS) / 3;
 
-    const uint8_t* full = image_frame(&s->pics, BgFull);
-    const uint8_t* leaves = image_frame(&s->pics, BgLeaves);
-    const uint8_t* tfull = image_frame(&s->pics, TextFull);
-    const uint8_t* tleaves = image_frame(&s->pics, TextLeaves);
+    const uint8_t* full = image_frame(&s->bg, 0);
+    const uint8_t* leaves = image_frame(&s->bg, 1);
 
     gfx_clear(f, 0);
     for(int y = 0; y < v.h; y++) {
         for(int x = 0; x < v.w; x++) {
             int i = y * v.w + x;
             int bg = leaves[i] + ((full[i] - leaves[i]) * mix >> 8);
-            int px = bg;
-            uint16_t k = s->map[i * 2] | s->map[i * 2 + 1] << 8;
-            if(k != 0xffff) {
-                int r = k / s->win_w, c = k % s->win_w;
-                int col = c - TEXT_START + step;
-                if(col > s->text_w - 1) col = s->text_w - 1;
-                if(r < s->text_h && col >= 0) {
-                    int t = (s->text[(r * s->text_w + col) >> 1] >> ((col & 1) * 4)) & 15;
-                    if(t) {
-                        int on = tleaves[i] + ((tfull[i] - tleaves[i]) * mix >> 8);
-                        /* the original's highlight is subtle; lift it so
-                         * the text reads on the LCD */
-                        int lift = (bg + 110) * mix >> 8;
-                        if(on < lift) on = lift > 255 ? 255 : lift;
-                        px = bg + (on - bg) * t / 7;
-                    }
-                }
-            }
-            f->px[v.y + y][v.x + x] = (uint8_t)clampi(px * level >> 8, 0, 255);
+            f->px[v.y + y][v.x + x] = (uint8_t)clampi(bg * level >> 8, 0, 255);
         }
     }
-}
 
-static void forest_deinit(void* state) {
-    Forest* s = state;
-    image_free(&s->pics);
-    plat_free(s->blob);
-    plat_free(s);
+    /* the text, at the screen pixels the window maps to */
+    for(int k = 0; k < s->n; k++) {
+        const uint8_t* h = s->hits + k * 6;
+        int col = h[3] - TEXT_START + step;
+        if(col > s->text_w - 1) col = s->text_w - 1;
+        if(col < 0) continue;
+        int t = (s->text[(h[2] * s->text_w + col) >> 1] >> ((col & 1) * 4)) & 15;
+        if(!t) continue;
+        int i = h[1] * v.w + h[0];
+        int bg = leaves[i] + ((full[i] - leaves[i]) * mix >> 8);
+        int on = h[5] + ((h[4] - h[5]) * mix >> 8);
+        /* the original's highlight is subtle; lift it so the text reads
+         * on the LCD */
+        int lift = (bg + 110) * mix >> 8;
+        if(on < lift) on = lift > 255 ? 255 : lift;
+        int px = bg + (on - bg) * t / 7;
+        f->px[v.y + h[1]][v.x + h[0]] = (uint8_t)clampi(px * level >> 8, 0, 255);
+    }
 }
 
 const Scene scene_forest = {

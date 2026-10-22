@@ -17,8 +17,11 @@ void plat_furi_set_display(GrayDisplay* display) {
 
 void* plat_alloc(size_t size) {
     /* furi's malloc never returns NULL (it crashes instead); check the heap
-     * first so a too-large scene fails gracefully. */
-    if(size + 4096 > memmgr_heap_get_max_free_block()) return NULL;
+     * first so a too-large scene fails gracefully. The block must fit (with
+     * the allocator's header), and 4 KB of heap must stay free elsewhere
+     * for the other threads; that can be anywhere, not in this block. */
+    if(size + 16 > memmgr_heap_get_max_free_block() || size + 4096 > memmgr_get_free_heap())
+        return NULL;
     void* p = malloc(size);
     memset(p, 0, size);
     return p;

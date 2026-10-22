@@ -70,7 +70,7 @@ Renders scenes as animated GIF files for testing.
 ```sh
 make -C host preview SCENES=7        # host/out/s07.gif
 make -C host preview SCENES=all S=10
-host/build/sr_host -t assets         # print the Play All timeline
+host/build/sr_host -t assets         # print the Play Demo timeline
 ```
 
 ## Layout

@@ -555,7 +555,15 @@ def reverse_map(hits, view=VIEW43):
                     for k in hits.get(y * 320 + x, ()):
                         votes[k] = votes.get(k, 0) + 1
             out.append(max(votes, key=votes.get) if votes else 0xFFFF)
-    return struct.pack("<%dH" % len(out), *out)
+    return out
+
+
+def sparse_map(rmap, win_w, rows, view=VIEW43):
+    """The screen pixels of a reverse map that show a strip pixel (window
+    row < rows): (x, y, window row, window column) each, in screen order."""
+    vw = view[0]
+    return [(i % vw, i // vw, k // win_w, k % win_w) for i, k in enumerate(rmap)
+            if k != 0xFFFF and k // win_w < rows]
 
 
 def lum_view(index_px, pal, view=VIEW43, w=320, h=200):
@@ -565,11 +573,13 @@ def lum_view(index_px, pal, view=VIEW43, w=320, h=200):
 
 
 def forest(src_dir, out):
-    """forest.bin: 'SRF2', u16 window w, h, u16 text w, h; reverse map
-    (85x64 u16 window index); text levels 0..7, two pixels per byte (even
-    x in the low nibble), h rows of w/2 bytes.
-    forest.srg: 4 frames 85x64 - background (full palette), background
-    (leaves-only palette), text over background (full), text (leaves)."""
+    """forest.bin: 'SRF3', u16 entries n, u16 text w, h; n x (u8 x, y,
+    window row, window column, text-over-background brightness with the
+    full palette, the same with the leaves-only one) - only the screen
+    pixels the text can reach; then text levels 0..7, two pixels per byte
+    (even x in the low nibble), h rows of w/2 bytes.
+    forest.srg: 2 frames 85x64 - background (full palette), background
+    (leaves-only palette)."""
     hill = read_rix(os.path.join(src_dir, "HILLBACK.CLX"))
     text = read_rix(os.path.join(src_dir, "O2.SCI"))
     win_w, win_h = 237, 31
@@ -577,20 +587,29 @@ def forest(src_dir, out):
     full = hill.pal
     leaves = [(0, 0, 0) if (i < 32 or 128 <= i < 160) else c for i, c in enumerate(full)]
     on = bytes((p + 128 + 7) & 255 for p in hill.px)  # brightest text level
-    frames = [lum_view(hill.px, full), lum_view(hill.px, leaves), lum_view(on, full), lum_view(on, leaves)]
-    write_srg(os.path.join(out, "forest.srg"), frames)
+    write_srg(os.path.join(out, "forest.srg"), [lum_view(hill.px, full), lum_view(hill.px, leaves)])
     tw, th = text.w, 30
-    with open(os.path.join(out, "forest.bin"), "wb") as f:
-        f.write(b"SRF2" + struct.pack("<4H", win_w, win_h, tw, th))
-        f.write(reverse_map(hits))
-        px = text.px[:tw * th]
-        f.write(bytes((px[i] & 15) | (px[i + 1] & 15) << 4 for i in range(0, tw * th, 2)))
+    px = text.px[:tw * th]
+    nibbles = bytes((px[i] & 15) | (px[i + 1] & 15) << 4 for i in range(0, tw * th, 2))
+    data = forest_bin(reverse_map(hits), win_w, lum_view(on, full).tobytes(), lum_view(on, leaves).tobytes(),
+                      tw, th, nibbles)
+    open(os.path.join(out, "forest.bin"), "wb").write(data)
     print("forest.bin: window %dx%d, text %dx%d" % (win_w, win_h, tw, th))
 
 
+def forest_bin(rmap, win_w, on_full, on_leaves, tw, th, nibbles):
+    entries = sparse_map(rmap, win_w, th)
+    out = b"SRF3" + struct.pack("<4H", len(entries), tw, th, 0)
+    for x, y, r, c in entries:
+        i = y * VIEW43[0] + x
+        out += bytes((x, y, r, c, on_full[i], on_leaves[i]))
+    return out + nibbles
+
+
 def water(src_dir, out):
-    """water.bin: 'SRWA', u16 window w, h, u16 sword w, h; reverse map
-    (85x64 u16); sword brightness (h rows of w bytes, 0 = transparent).
+    """water.bin: 'SRW2', u16 entries n, u16 sword w, h; n x (u8 x, y,
+    window row, window column) - only the screen pixels the sword can
+    reach; then sword brightness (h rows of w bytes, 0 = transparent).
     water.srg: background 85x64."""
     sword = read_rix(os.path.join(src_dir, "MIEKKA.SCI"))
     bkg = read_rix(os.path.join(src_dir, "BKG.CLX"))
@@ -599,11 +618,17 @@ def water(src_dir, out):
     write_srg(os.path.join(out, "water.srg"), [lum_view(bkg.px, sword.pal)])
     sw, sh = sword.w, 34
     lut = bytes([0] + [max(1, lum(sword.pal[i])) for i in range(1, 256)])
-    with open(os.path.join(out, "water.bin"), "wb") as f:
-        f.write(b"SRWA" + struct.pack("<4H", win_w, win_h, sw, sh))
-        f.write(reverse_map(hits))
-        f.write(sword.px[:sw * sh].translate(lut))
+    data = water_bin(reverse_map(hits), win_w, sw, sh, sword.px[:sw * sh].translate(lut))
+    open(os.path.join(out, "water.bin"), "wb").write(data)
     print("water.bin: window %dx%d, sword %dx%d" % (win_w, win_h, sw, sh))
+
+
+def water_bin(rmap, win_w, sw, sh, sword):
+    entries = sparse_map(rmap, win_w, sh)
+    out = b"SRW2" + struct.pack("<4H", len(entries), sw, sh, 0)
+    for e in entries:
+        out += bytes(e)
+    return out + sword
 
 
 def lens_maps(src_dir, out):

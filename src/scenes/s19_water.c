@@ -14,35 +14,58 @@
 #define FADEOUT_MS (SYNC_WATER_FADEOUT - SYNC_WATER_START)
 #define WATER_MS   (FADEOUT_MS + 64 * 1000 / 70)
 #define LAST_COL   390
+#define WIN_W      158 /* the original window's width */
 
 typedef struct {
     Image bg;
-    uint8_t* blob;
-    uint16_t win_w, win_h, sword_w, sword_h;
-    const uint8_t* map; /* 85x64 u16 window pixel or 0xffff */
-    const uint8_t* sword; /* brightness, 0 = transparent */
+    uint8_t* hits; /* n x (x, y, window row, column) */
+    uint8_t* sword; /* brightness, 0 = transparent */
+    uint16_t n, sword_w, sword_h;
 } Water;
+
+static void water_deinit(void* state) {
+    Water* s = state;
+    image_free(&s->bg);
+    plat_free(s->hits);
+    plat_free(s->sword);
+    plat_free(s);
+}
+
+/* The hit list and the sword go in separate blocks: smaller holes are
+ * easier to find in the heap. */
+static bool water_load(Water* s) {
+    if(!image_load(&s->bg, "water.srg")) return false;
+    PlatFile* file = plat_asset_open("water.bin");
+    if(!file) return false;
+    uint8_t hdr[12];
+    bool ok = plat_asset_read(file, 0, hdr, sizeof(hdr)) && !memcmp(hdr, "SRW2", 4);
+    if(ok) {
+        s->n = hdr[4] | hdr[5] << 8;
+        s->sword_w = hdr[6] | hdr[7] << 8;
+        s->sword_h = hdr[8] | hdr[9] << 8;
+        size_t hits = (size_t)s->n * 4, sword = (size_t)s->sword_w * s->sword_h;
+        ok = s->sword_w > LAST_COL && (s->hits = plat_alloc(hits)) &&
+             plat_asset_read(file, sizeof(hdr), s->hits, hits) && (s->sword = plat_alloc(sword)) &&
+             plat_asset_read(file, sizeof(hdr) + hits, s->sword, sword);
+    }
+    plat_asset_close(file);
+    return ok;
+}
 
 static void* water_init(const Scene* self) {
     (void)self;
     Water* s = plat_alloc(sizeof(Water));
     if(!s) return NULL;
-    size_t size = 0;
-    s->blob = plat_load_asset("water.bin", &size);
-    if(!s->blob || size < 12 || memcmp(s->blob, "SRWA", 4) || !image_load(&s->bg, "water.srg")) {
-        image_free(&s->bg);
-        plat_free(s->blob);
-        plat_free(s);
+    if(!water_load(s)) {
+        water_deinit(s);
         return NULL;
     }
-    const uint8_t* d = s->blob;
-    s->win_w = d[4] | d[5] << 8;
-    s->win_h = d[6] | d[7] << 8;
-    s->sword_w = d[8] | d[9] << 8;
-    s->sword_h = d[10] | d[11] << 8;
-    s->map = d + 12;
-    s->sword = s->map + s->bg.w * s->bg.h * 2;
     return s;
+}
+
+/* lift the dark scene's mid-tones */
+static inline int water_lift(int px, int level) {
+    return px * (510 - px) / 255 * level >> 8;
 }
 
 static void water_render(void* state, Frame* f, uint32_t t_ms) {
@@ -56,31 +79,19 @@ static void water_render(void* state, Frame* f, uint32_t t_ms) {
 
     const uint8_t* bg = image_frame(&s->bg, 0);
     gfx_clear(f, 0);
-    for(int y = 0; y < v.h; y++) {
-        for(int x = 0; x < v.w; x++) {
-            int i = y * v.w + x;
-            int px = bg[i];
-            uint16_t k = s->map[i * 2] | s->map[i * 2 + 1] << 8;
-            if(k != 0xffff && step > 0) {
-                int r = k / s->win_w, c = k % s->win_w;
-                int col = c - s->win_w + step;
-                if(col > LAST_COL) col = LAST_COL;
-                if(r < s->sword_h && col >= 0) {
-                    int sv = s->sword[r * s->sword_w + col];
-                    if(sv) px = sv;
-                }
-            }
-            px = px * (510 - px) / 255; /* lift the dark scene's mid-tones */
-            f->px[v.y + y][v.x + x] = (uint8_t)(px * level >> 8);
-        }
-    }
-}
+    for(int y = 0; y < v.h; y++)
+        for(int x = 0; x < v.w; x++)
+            f->px[v.y + y][v.x + x] = (uint8_t)water_lift(bg[y * v.w + x], level);
+    if(step <= 0) return;
 
-static void water_deinit(void* state) {
-    Water* s = state;
-    image_free(&s->bg);
-    plat_free(s->blob);
-    plat_free(s);
+    for(int k = 0; k < s->n; k++) {
+        const uint8_t* h = s->hits + k * 4;
+        int col = h[3] - WIN_W + step;
+        if(col > LAST_COL) col = LAST_COL;
+        if(col < 0) continue;
+        int sv = s->sword[h[2] * s->sword_w + col];
+        if(sv) f->px[v.y + h[1]][v.x + h[0]] = (uint8_t)water_lift(sv, level);
+    }
 }
 
 const Scene scene_water = {
