@@ -8,11 +8,10 @@ App(
     stack_size=4 * 1024,
     fap_category="Media",
     fap_version="0.1",
-    fap_icon="second.png",  # 10x10 1-bit PNG
+    fap_icon="images/second.png",  # 10x10 1-bit PNG
     fap_description="Future Crew's Second Reality demo, recreated for the Flipper Zero",
     fap_author="Roberto De Feo",
     fap_weburl="https://github.com/rdefeo/second",
-    fap_icon_assets="images",  # Image assets to compile for this application
     fap_file_assets="assets",  # Scene data copied to /ext/apps_assets/second
     sources=["*.c*", "!host", "!tools"],
 )

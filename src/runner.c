@@ -29,6 +29,7 @@ typedef struct {
     RunnerMode mode;
     Mask* setup_text;
     bool paused;
+    Audio* audio; /* Play Demo and single scenes; NULL in stealth mode */
 } Runner;
 
 /* Keys reach us through our own fullscreen view port, which sits on top of
@@ -91,7 +92,7 @@ static Step poll_input(Runner* r) {
             setup_handle(r, &e);
             continue;
         }
-        if(r->mode == RunnerModePlayAll && (e.type == InputTypeShort || e.type == InputTypeRepeat)) {
+        if(e.type == InputTypeShort || e.type == InputTypeRepeat) {
             if(e.key == InputKeyUp && r->cfg->volume < GRAY_VOLUME_MAX) r->cfg->volume++;
             if(e.key == InputKeyDown && r->cfg->volume > 1) r->cfg->volume--;
         }
@@ -103,8 +104,12 @@ static Step poll_input(Runner* r) {
     return step;
 }
 
-/* Runs one scene until it ends or the user steps away from it. */
-static Step run_scene(Runner* r, const Scene* scene) {
+static void music_sync(Audio* audio, const Schedule* s, int32_t global, const char** playing, bool force);
+
+/* Runs one scene until the user steps away from it, looping it. With music
+ * (sched set up by single_music_start, music_zero >= 0) the demo's music
+ * plays from where the scene starts in it, back in step on every loop. */
+static Step run_scene(Runner* r, const Scene* scene, const Schedule* sched, int32_t music_zero) {
     void* state = scene->init(scene);
     FURI_LOG_I(
         TAG, "scene %s %s, heap %u", scene->name, state ? "ok" : "FAILED", memmgr_get_free_heap());
@@ -114,6 +119,9 @@ static Step run_scene(Runner* r, const Scene* scene) {
     uint32_t pause_at = 0;
     uint32_t frames = 0, fps_at = start;
     Step step = StepNone;
+    bool music = sched && music_zero >= 0;
+    const char* playing = (const char*)1; /* nothing selected yet */
+    bool resync = true;
 
     while(step == StepNone) {
         uint32_t frame_start = furi_get_tick();
@@ -125,12 +133,20 @@ static Step run_scene(Runner* r, const Scene* scene) {
                 pause_at = frame_start;
             else
                 start += frame_start - pause_at;
+            if(music) audio_pause(r->audio, r->paused);
+            resync = !r->paused;
         }
 
         uint32_t t = (r->paused ? pause_at : frame_start) - start;
         if(t >= duration) {
             start = frame_start; /* single scene: loop */
             t = 0;
+            resync = true;
+        }
+        if(music && !r->paused) {
+            music_sync(r->audio, sched, music_zero + (int32_t)t, &playing, resync);
+            resync = false;
+            audio_set_volume(r->audio, r->cfg->volume * 256 / GRAY_VOLUME_MAX);
         }
 
         Frame* f = gray_display_frame(r->display);
@@ -199,6 +215,29 @@ static void music_sync(Audio* audio, const Schedule* s, int32_t global, const ch
         audio_play(audio, want, offset, want && !strcmp(want, "s0b.pcm") ? S0B_LOOP : AUDIO_NO_LOOP);
         *playing = want;
     }
+}
+
+/* Where scene idx starts in the demo's music, to play it on its own: at
+ * its cue, or for a scene that follows the one before it, at that one's
+ * start plus its duration (a scene whose duration depends on its data is
+ * loaded briefly to ask). Sets sched up so music_at() works on that
+ * clock, and returns the scene's start on it. */
+static int32_t single_music_start(Schedule* sched, size_t idx) {
+    int32_t offset = 0;
+    size_t j = idx;
+    while(j > 0 && scene_cue[j].seg == CUE_AFTER) {
+        const Scene* prev = scene_list[--j];
+        uint32_t d = prev->duration_ms;
+        if(prev->duration_fn) {
+            void* st = prev->init(prev);
+            d = scene_duration(prev, st);
+            if(st) prev->deinit(st);
+        }
+        offset += (int32_t)d + scene_cue[j + 1].ms;
+    }
+    schedule_reset(sched);
+    if(scene_cue[j].seg != SEG_S0A) sched->seg[scene_cue[j].seg] = 0;
+    return scene_cue[j].ms + offset;
 }
 
 /* Play All: one clock for the whole demo. Each scene starts at its cue
@@ -329,15 +368,21 @@ void runner_run(Gui* gui, GrayConfig* cfg, RunnerMode mode, size_t start) {
 
     if(mode == RunnerModeSetup) {
         setup_text_update(&r);
-        run_scene(&r, &scene_test_pattern);
+        run_scene(&r, &scene_test_pattern, NULL, -1);
         gray_config_save(cfg);
         plat_mask_free(r.setup_text);
     } else if(mode == RunnerModePlayAll) {
         run_play_all(&r);
     } else {
+        r.audio = audio_start();
+        /* below normal priority, as in Play Demo: the SD card feeds the audio */
+        FuriThreadPriority prio = furi_thread_get_current_priority();
+        furi_thread_set_current_priority(FuriThreadPriorityLow);
         size_t idx = start;
         while(idx < scene_count) {
-            Step step = run_scene(&r, scene_list[idx]);
+            Schedule sched;
+            int32_t zero = single_music_start(&sched, idx);
+            Step step = run_scene(&r, scene_list[idx], &sched, zero);
             if(step == StepQuit) break;
             if(step == StepPrev) {
                 idx = idx ? idx - 1 : scene_count - 1;
@@ -346,6 +391,9 @@ void runner_run(Gui* gui, GrayConfig* cfg, RunnerMode mode, size_t start) {
                 if(idx >= scene_count) idx = 0;
             }
         }
+        audio_stop(r.audio);
+        gray_config_save(cfg); /* remembers the volume */
+        furi_thread_set_current_priority(prio);
     }
 
     plat_furi_set_display(NULL);

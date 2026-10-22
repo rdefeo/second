@@ -1,6 +1,6 @@
 #!/bin/sh
 # Copy the rendered music (tools/render_music.py) to the Flipper's SD card,
-# where the app's Play All streams it from: /ext/apps_data/second/.
+# where the app's Play Demo streams it from: /ext/apps_data/second/.
 #   tools/upload_music.sh [port]   (default /dev/ttyACM0)
 set -e
 PORT=${1:-/dev/ttyACM0}

@@ -6,11 +6,12 @@ A recreation of Future Crew's 1993 demo *Second Reality* on the Flipper Zero's 1
 
 - Menu: **Play Demo**, **Display Setup**, **About**, or any of the 25 scenes.
 - In a scene: **Back** = menu, **Left/Right** = previous/next scene, **OK** = pause.
-- Play Demo only: **Up/Down** = music volume (remembered).
+- **Up/Down** = music volume (remembered). A scene picked from the menu
+  plays with the demo's music from where that scene starts in it, and loops.
 - Display Setup: Up/Down tune the panel refresh rate (hold for 1 Hz steps),
   Left/Right pick 1-bit dither or 3–9 gray levels. Back saves.
 
-Play Demo is silent in stealth mode (Lock menu on the desktop: press Up).
+The app is silent in stealth mode (Lock menu on the desktop: press Up).
 
 ## Building
 
