@@ -1,5 +1,28 @@
 # For details & more options, see documentation/AppManifests.md in firmware repo
 
+# Release build: SECOND_RELEASE=1 ufbt  (see README). The music (14 MB) is
+# then packed into the .fap with the other assets, so the .fap is all that's
+# needed. Dev builds leave it out so installs stay fast; the app then plays
+# music uploaded by tools/upload_music.sh.
+import os
+import shutil
+
+_here = os.path.dirname(os.path.abspath(locals().get("app_manifest_path", "application.fam")))
+_assets = "assets"
+if os.environ.get("SECOND_RELEASE") == "1":
+    # (plain loops: the manifest is exec'd in a function, where a list
+    # comprehension can't see the names defined here)
+    _release = os.path.join(_here, ".release", "assets")
+    shutil.rmtree(_release, ignore_errors=True)
+    shutil.copytree(os.path.join(_here, "assets"), _release)
+    os.makedirs(os.path.join(_release, "music"))
+    for _name in ("s0a.pcm", "s1.pcm", "s0b.pcm"):
+        _pcm = os.path.join(_here, "music", _name)
+        if not os.path.exists(_pcm):
+            raise Exception("release build needs the music (tools/render_music.py): missing " + _pcm)
+        shutil.copy2(_pcm, os.path.join(_release, "music"))
+    _assets = ".release/assets"
+
 App(
     appid="second",  # Must be unique
     name="Second Reality",  # Displayed in menus
@@ -12,6 +35,6 @@ App(
     fap_description="Future Crew's Second Reality demo, recreated for the Flipper Zero",
     fap_author="Roberto De Feo",
     fap_weburl="https://github.com/rdefeo/second",
-    fap_file_assets="assets",  # Scene data copied to /ext/apps_assets/second
+    fap_file_assets=_assets,  # Scene data (+ music in release builds) copied to /ext/apps_assets/second
     sources=["*.c*", "!host", "!tools"],
 )

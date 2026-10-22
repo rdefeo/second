@@ -211,11 +211,16 @@ static void apply_request(Audio* a) {
     if(a->file_open) storage_file_close(a->file);
     a->file_open = false;
     if(!name[0]) return;
+    /* packed in the .fap in release builds (unpacked to apps_assets), else
+     * uploaded by tools/upload_music.sh */
     char path[64];
-    snprintf(path, sizeof(path), EXT_PATH("apps_data/second/%s"), name);
+    snprintf(path, sizeof(path), STORAGE_APP_ASSETS_PATH_PREFIX "/music/%s", name);
     if(!storage_file_open(a->file, path, FSAM_READ, FSOM_OPEN_EXISTING)) {
-        FURI_LOG_E(TAG, "can't open %s", path);
-        return;
+        snprintf(path, sizeof(path), EXT_PATH("apps_data/second/%s"), name);
+        if(!storage_file_open(a->file, path, FSAM_READ, FSOM_OPEN_EXISTING)) {
+            FURI_LOG_E(TAG, "no music %s (release build, or tools/upload_music.sh)", name);
+            return;
+        }
     }
     a->file_open = true;
     a->file_size = (uint32_t)storage_file_size(a->file);

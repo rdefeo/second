@@ -9,3 +9,4 @@ host/build/
 host/out/
 __pycache__/
 music/
+.release/

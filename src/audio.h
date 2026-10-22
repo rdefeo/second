@@ -18,7 +18,8 @@ void audio_stop(Audio* a);
 
 #define AUDIO_NO_LOOP UINT32_MAX
 
-/* Play /ext/apps_data/second/<name> from offset_ms; name NULL = silence.
+/* Play music file <name> from offset_ms (from the .fap's assets/music, or
+ * /ext/apps_data/second for dev builds); name NULL = silence.
  * At the end of the file, carry on from sample loop (AUDIO_NO_LOOP: stop). */
 void audio_play(Audio* a, const char* name, uint32_t offset_ms, uint32_t loop);
 void audio_set_volume(Audio* a, int volume); /* 0..256 */
