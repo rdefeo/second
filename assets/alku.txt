@@ -1,0 +1,26 @@
+120 A
+160 Future Crew
+200 Production
+
+160 First Presented
+200 at Assembly 93
+
+120 in
+160 è
+
+150 Graphics
+190 Marvel
+230 Pixel
+
+150 Music
+190 Purple Motion
+230 Skaven
+
+130 Code
+170 Psi
+210 Trug
+248 Wildfire
+
+150 Additional Design
+190 Abyss
+230 Gore

@@ -1,0 +1,11 @@
+dist/*
+.vscode
+.clang-format
+.clangd
+.editorconfig
+.env
+.ufbt
+host/build/
+host/out/
+__pycache__/
+music/
