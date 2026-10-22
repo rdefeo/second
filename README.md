@@ -2,12 +2,16 @@
 
 A recreation of Future Crew's 1993 demo *Second Reality* on the Flipper Zero's 128x64 LCD, with temporal grayscale and the original music streamed to the speaker. Recall that the demo starts with a dark screen as the music slowly fades in - be patient. Requires firmware/SDK 1.5.1 or newer (API 88.2+).
 
-![s02](screenshots/s02.gif)
-![s06](screenshots/s06.gif)
-
-![s14](screenshots/s14.gif)
-![s20](screenshots/s20.gif)
-
+<table>
+  <tr>
+    <td><img src="screenshots/s02.gif"/></td>
+    <td><img src="screenshots/s06.gif"/></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/s14.gif"/></td>
+    <td><img src="screenshots/s20.gif"/></td>
+  </tr>
+</table>
 
 ## Controls
 
