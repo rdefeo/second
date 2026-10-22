@@ -22,7 +22,7 @@ static const char about_text[] = "Second Reality by\n"
                                  "Future Crew\n"
                                  "\n"
                                  "Adapted to the\n"
-                                 "Flipperzero by\n"
+                                 "Flipper Zero by\n"
                                  "Roberto De Feo\n"
                                  "github.com/rdefeo";
 

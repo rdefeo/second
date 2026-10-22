@@ -2,6 +2,13 @@
 
 A recreation of Future Crew's 1993 demo *Second Reality* on the Flipper Zero's 128x64 LCD, with temporal grayscale and the original music streamed to the speaker. Recall that the demo starts with a dark screen as the music slowly fades in - be patient. Requires firmware/SDK 1.5.1 or newer (API 88.2+).
 
+![s02](screenshots/s02.gif)
+![s06](screenshots/s06.gif)
+
+![s14](screenshots/s14.gif)
+![s20](screenshots/s20.gif)
+
+
 ## Controls
 
 - Menu: **Play Demo**, **Display Setup**, **About**, or any of the 25 scenes.
@@ -13,9 +20,9 @@ A recreation of Future Crew's 1993 demo *Second Reality* on the Flipper Zero's 1
 
 ## Development
 
-Everything was coded by AI. The first version was nearly complete with just a handful of prompts on Opus 5.5. Many more sessions were used to fix bugs, adjust rendering and display, reduce memory consumption, and apply some artistic license. This should be obvious, but this effort was like trying to cram 100kg of stuff into a 5kg bag so some concessions were made. The original demo relies on a larger resolution screen, 256 colors, and more available memory - all of which are lacking on the Flipperzero. Decisions were made to improve the final output based on my own subjective ideas. Some concrete changes were:
+Everything was coded by AI. The first version was nearly complete with just a handful of prompts on Opus 5.5. Many more sessions were used to fix bugs, adjust rendering and display, reduce memory consumption, and apply some artistic license. This should be obvious, but this effort was like trying to cram 100kg of stuff into a 5kg bag so some concessions were made. The original demo relies on a larger resolution screen, 256 colors, and more available memory - all of which are lacking on the Flipper Zero. Decisions were made to improve the final output based on my own subjective ideas. Some concrete changes were:
 
-- The original was designed for a 4x3 screen while the Flipperzero is 2x1. Any scene that was letterboxed in the dmeo have been expanded to use the full LCD.
+- The original was designed for a 4x3 screen while the Flipper Zero is 2x1. Any scene that was letterboxed in the dmeo have been expanded to use the full LCD.
 - Some 3D scenes had their field of view expanded while trying to preserve the original aspect ratio
 - Some scenes, or parts of scenes, were brightened
 - In an effort to boost framerates, SIMD instructions were used in some scenes (this was probably not necessary)
