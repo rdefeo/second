@@ -22,6 +22,10 @@ A recreation of Future Crew's 1993 demo *Second Reality* on the Flipper Zero's 1
 - Display Setup: Up/Down tune the panel refresh rate (hold for 1 Hz steps),
   Left/Right pick 1-bit dither or 3–9 gray levels. Back saves.
 
+## Installation
+
+Download the latest `.fap` from the [Releases](https://github.com/rdefeo/second/releases) page and install using qflipper or the mobile app. Or, follow the Building instructions below.
+
 ## Development
 
 Everything was coded by AI. The first version was nearly complete with just a handful of prompts on Opus 5.5. Many more sessions were used to fix bugs, adjust rendering and display, reduce memory consumption, and apply some artistic license. This should be obvious, but this effort was like trying to cram 100kg of stuff into a 5kg bag so some concessions were made. The original demo relies on a larger resolution screen, 256 colors, and more available memory - all of which are lacking on the Flipper Zero. Decisions were made to improve the final output based on my own subjective ideas. Some concrete changes were:
